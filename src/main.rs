@@ -4,29 +4,36 @@
 #![test_runner(rust_os_practice::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use bootloader::{entry_point, BootInfo};
+
 use core::panic::PanicInfo;
 use rust_os_practice::println;
 
-#[no_mangle] // この関数の名前修飾をしない
-pub extern "C" fn _start() {
-    // リンカはデフォルトで`_start`と言う名前の関数を探すので、
-    // この関数がエントリポイントとなる
-    println!("Hello World{}", "!");
+entry_point!(kernel_main);
 
+fn kernel_main(boot_info: &'static BootInfo) -> ! {
+    use rust_os_practice::memory::{self, BootInfoFrameAllocator};
+    use x86_64::{structures::paging::Page, VirtAddr};
+
+    println!("Hello World{}", "!");
     rust_os_practice::init();
 
-    use x86_64::registers::control::Cr3;
+    let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
+    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    // let mut frame_allocator = memory::EmptyFrameAllocator;
+    let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
-    let (level_4_page_table, _) = Cr3::read();
-    println!(
-        "Level 4 page table at: {:?}",
-        level_4_page_table.start_address()
-    );
+    // map an unused page
+    let page = Page::containing_address(VirtAddr::new(0xdeadbeaf000));
+    memory::create_example_mapping(page, &mut mapper, &mut frame_allocator);
+
+    let page_ptr: *mut u64 = page.start_address().as_mut_ptr();
+    unsafe { page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e) };
 
     #[cfg(test)]
     test_main();
 
-    println!("It dit not crash!");
+    println!("It did not crash");
     rust_os_practice::hlt_loop();
 }
 
