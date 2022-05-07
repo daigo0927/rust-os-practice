@@ -11,7 +11,10 @@ extern crate alloc;
 use alloc::{boxed::Box, rc::Rc, vec, vec::Vec};
 
 use core::panic::PanicInfo;
-use rust_os_practice::println;
+use rust_os_practice::{
+    println,
+    task::{executor::Executor, keyboard, Task},
+};
 
 entry_point!(kernel_main);
 
@@ -62,8 +65,10 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(test)]
     test_main();
 
-    println!("It did not crash");
-    rust_os_practice::hlt_loop();
+    let mut executor = Executor::new();
+    executor.spawn(Task::new(example_task()));
+    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.run();
 }
 
 // この関数はパニック時に呼ばれる
@@ -83,4 +88,13 @@ fn panic(info: &PanicInfo) -> ! {
 #[test_case]
 fn trivial_assertion() {
     assert_eq!(1, 1);
+}
+
+async fn async_number() -> u32 {
+    42
+}
+
+async fn example_task() {
+    let number = async_number().await;
+    println!("async number: {}", number);
 }
